@@ -1,7 +1,6 @@
 package com.aircraft.controller;
 
 import com.aircraft.dao.LauncherDAO;
-import com.aircraft.model.Launcher;
 import com.aircraft.model.LauncherMission;
 import com.aircraft.model.LauncherStatus;
 import com.aircraft.util.AlertUtils;
@@ -36,6 +35,7 @@ import java.util.List;
 /**
  * Controller for the Fatigue Monitoring screen.
  * Handles displaying launcher status and generating fatigue monitoring reports.
+ * Updated to work with part numbers instead of serial numbers as specified in the requirements.
  */
 public class FatigueMonitoringController {
 
@@ -136,6 +136,9 @@ public class FatigueMonitoringController {
         if (expandGraphButton != null) {
             expandGraphButton.setDisable(true);
         }
+
+        // Debug output
+        System.out.println("FatigueMonitoringController initialized");
     }
 
     /**
@@ -173,6 +176,7 @@ public class FatigueMonitoringController {
         // Add debug logging to ensure TableView is correctly set up
         System.out.println("Table columns initialized");
     }
+
     /**
      * Loads launcher part numbers from the database into the combo box.
      * Changed from loadLauncherSerialNumbers()
@@ -188,14 +192,7 @@ public class FatigueMonitoringController {
     /**
      * Handles the selection of a launcher from the combo box.
      */
-    /**
-     * Updates to FatigueMonitoringController.java
-     */
-
     @FXML
-    /**
-     * Updated onLauncherSelected method for FatigueMonitoringController
-     */
     private void onLauncherSelected() {
         String selectedPartNumber = launcherSerialComboBox.getValue();
         if (selectedPartNumber != null && !selectedPartNumber.isEmpty()) {

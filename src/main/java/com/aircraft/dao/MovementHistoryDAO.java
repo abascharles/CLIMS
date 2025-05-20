@@ -13,6 +13,7 @@ import java.util.List;
 
 /**
  * Data Access Object for MovementHistory operations.
+ * Updated to work with the latest database schema that uses part numbers.
  */
 public class MovementHistoryDAO {
 
@@ -30,6 +31,10 @@ public class MovementHistoryDAO {
 
         try {
             conn = DBUtil.getConnection();
+
+            // Debug - Print query for diagnostics
+            System.out.println("Querying view for part number: " + partNumber);
+
             String query = "SELECT PartNumber, Nomenclatura, DataInstallazione, DataRimozione, " +
                     "PosizioneVelivolo, MatricolaVelivolo, TipoComponente " +
                     "FROM views_material_handling " +
@@ -40,21 +45,30 @@ public class MovementHistoryDAO {
             stmt.setString(1, partNumber);
 
             rs = stmt.executeQuery();
+
+            int count = 0;
             while (rs.next()) {
+                count++;
                 MovementHistory history = new MovementHistory();
                 history.setPartNumber(rs.getString("PartNumber"));
                 history.setItemName(rs.getString("Nomenclatura"));
                 history.setItemType(rs.getString("TipoComponente"));
 
+                // Serial Number is no longer used, set to "N/A"
+                history.setSerialNumber("N/A");
+
                 // Handle date conversion from SQL Date to LocalDate
                 java.sql.Date installDate = rs.getDate("DataInstallazione");
                 if (installDate != null) {
                     history.setDate(installDate.toLocalDate());
+
+                    // Debug - print the date
+                    System.out.println("Found history: " + installDate + " for " + partNumber + " at position " + rs.getString("PosizioneVelivolo"));
                 }
 
-                // Determine action type based on dates
+                // Determine action type based on dates - if DataRimozione is null, it's still installed
                 java.sql.Date removalDate = rs.getDate("DataRimozione");
-                String actionType = (removalDate == null) ? "Embarkation" : "Disembarkation";
+                String actionType = (removalDate == null) ? "Installation" : "Removal";
                 history.setActionType(actionType);
 
                 history.setLocation(rs.getString("PosizioneVelivolo"));
@@ -62,7 +76,11 @@ public class MovementHistoryDAO {
 
                 historyList.add(history);
             }
+
+            System.out.println("Total records found for " + partNumber + ": " + count);
+
         } catch (SQLException e) {
+            System.err.println("Error in getByPartNumber: " + e.getMessage());
             e.printStackTrace();
         } finally {
             DBUtil.closeResources(conn, stmt, rs);
@@ -102,9 +120,8 @@ public class MovementHistoryDAO {
                 history.setItemName(rs.getString("Nomenclatura"));
                 history.setItemType(rs.getString("TipoComponente"));
 
-                // Determine serialNumber from other fields if needed or set to null
-                // For now, leaving this blank since it's not in the view
-                history.setSerialNumber("");
+                // Set serial number to "N/A" as it's no longer used
+                history.setSerialNumber("N/A");
 
                 // Handle date conversion from SQL Date to LocalDate
                 java.sql.Date installDate = rs.getDate("DataInstallazione");
@@ -114,7 +131,7 @@ public class MovementHistoryDAO {
 
                 // Determine action type based on dates
                 java.sql.Date removalDate = rs.getDate("DataRimozione");
-                String actionType = (removalDate == null) ? "Embarkation" : "Disembarkation";
+                String actionType = (removalDate == null) ? "Installation" : "Removal";
                 history.setActionType(actionType);
 
                 history.setLocation(rs.getString("PosizioneVelivolo"));
@@ -123,6 +140,7 @@ public class MovementHistoryDAO {
                 historyList.add(history);
             }
         } catch (SQLException e) {
+            System.err.println("Error in getLauncherHistoryByPartNumber: " + e.getMessage());
             e.printStackTrace();
         } finally {
             DBUtil.closeResources(conn, stmt, rs);
@@ -162,6 +180,9 @@ public class MovementHistoryDAO {
                 history.setItemName(rs.getString("Nomenclatura"));
                 history.setItemType("Missile"); // Use "Missile" instead of "Carico" for UI consistency
 
+                // Serial number set to "N/A" as it's no longer used
+                history.setSerialNumber("N/A");
+
                 // Handle date conversion from SQL Date to LocalDate
                 java.sql.Date installDate = rs.getDate("DataInstallazione");
                 if (installDate != null) {
@@ -170,7 +191,7 @@ public class MovementHistoryDAO {
 
                 // Determine action type based on dates
                 java.sql.Date removalDate = rs.getDate("DataRimozione");
-                String actionType = (removalDate == null) ? "Embarkation" : "Disembarkation";
+                String actionType = (removalDate == null) ? "Installation" : "Removal";
                 history.setActionType(actionType);
 
                 history.setLocation(rs.getString("PosizioneVelivolo"));
@@ -179,6 +200,7 @@ public class MovementHistoryDAO {
                 historyList.add(history);
             }
         } catch (SQLException e) {
+            System.err.println("Error in getLoadHistoryByPartNumber: " + e.getMessage());
             e.printStackTrace();
         } finally {
             DBUtil.closeResources(conn, stmt, rs);
@@ -219,6 +241,7 @@ public class MovementHistoryDAO {
                 return dbType; // Return the type as is if it doesn't match known types
             }
         } catch (SQLException e) {
+            System.err.println("Error in getItemTypeByPartNumber: " + e.getMessage());
             e.printStackTrace();
         } finally {
             DBUtil.closeResources(conn, stmt, rs);
@@ -252,79 +275,12 @@ public class MovementHistoryDAO {
                 return rs.getString("Nomenclatura");
             }
         } catch (SQLException e) {
+            System.err.println("Error in getItemNameByPartNumber: " + e.getMessage());
             e.printStackTrace();
         } finally {
             DBUtil.closeResources(conn, stmt, rs);
         }
 
         return null;
-    }
-
-    /**
-     * Inserts a new movement record.
-     * This is just a placeholder as the application uses this method, but we should
-     * modify the implementation if needed based on the new database design.
-     */
-    public boolean insertMovementRecord(String partNumber, String itemType, String itemName,
-                                        String serialNumber, LocalDate actionDate,
-                                        String actionType, String location, String aircraftId) {
-        Connection conn = null;
-        PreparedStatement stmt = null;
-        boolean success = false;
-
-        try {
-            conn = DBUtil.getConnection();
-
-            // This would need to be updated to insert into the appropriate tables
-            // based on the type (storico_carico or storico_lanciatore)
-            if ("Launcher".equals(itemType)) {
-                // Insert into storico_lanciatore
-                String query = "INSERT INTO storico_lanciatore (MatricolaVelivolo, PartNumber, " +
-                        "DataInstallazione, DataRimozione, PosizioneVelivolo) " +
-                        "VALUES (?, ?, ?, ?, ?)";
-
-                stmt = conn.prepareStatement(query);
-                stmt.setString(1, aircraftId);
-                stmt.setString(2, partNumber);
-                stmt.setDate(3, java.sql.Date.valueOf(actionDate));
-                // If disembarkation, set removal date
-                if ("Disembarkation".equals(actionType)) {
-                    stmt.setDate(4, java.sql.Date.valueOf(actionDate));
-                } else {
-                    stmt.setNull(4, java.sql.Types.DATE);
-                }
-                stmt.setString(5, location);
-
-            } else if ("Missile".equals(itemType)) {
-                // Insert into storico_carico
-                String query = "INSERT INTO storico_carico (PartNumber, Nomenclatura, " +
-                        "DataImbarco, DataSbarco, PosizioneVelivolo, MatricolaVelivolo) " +
-                        "VALUES (?, ?, ?, ?, ?, ?)";
-
-                stmt = conn.prepareStatement(query);
-                stmt.setString(1, partNumber);
-                stmt.setString(2, itemName);
-                stmt.setDate(3, java.sql.Date.valueOf(actionDate));
-                // If disembarkation, set removal date
-                if ("Disembarkation".equals(actionType)) {
-                    stmt.setDate(4, java.sql.Date.valueOf(actionDate));
-                } else {
-                    stmt.setNull(4, java.sql.Types.DATE);
-                }
-                stmt.setString(5, location);
-                stmt.setString(6, aircraftId);
-            }
-
-            if (stmt != null) {
-                int rowsAffected = stmt.executeUpdate();
-                success = rowsAffected > 0;
-            }
-        } catch (SQLException e) {
-            e.printStackTrace();
-        } finally {
-            DBUtil.closeResources(conn, stmt, null);
-        }
-
-        return success;
     }
 }

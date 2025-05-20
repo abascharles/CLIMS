@@ -79,6 +79,9 @@ public class MaterialHandlingController {
 
         // Set up enter key press on the part number field to trigger search
         partNumberSearchField.setOnAction(this::onSearchButtonClick);
+
+        // Debug message
+        System.out.println("MaterialHandlingController initialized");
     }
 
     /**
@@ -100,21 +103,24 @@ public class MaterialHandlingController {
             return;
         }
 
-        // Determine item type (launcher or missile/load)
+        System.out.println("Searching for part number: " + partNumber);
+
+        // Get item type and name
         String itemType = movementHistoryDAO.getItemTypeByPartNumber(partNumber);
+        String itemName = movementHistoryDAO.getItemNameByPartNumber(partNumber);
+
+        System.out.println("Item type: " + itemType + ", Item name: " + itemName);
 
         if (itemType != null) {
-            String itemName = movementHistoryDAO.getItemNameByPartNumber(partNumber);
             itemTypeLabel.setText("Item Type: " + itemType + (itemName != null ? " - " + itemName : ""));
 
-            // Retrieve movement history based on item type
+            // Retrieve movement history
             List<MovementHistory> history;
-            if (itemType.equalsIgnoreCase("Launcher")) {
-                history = movementHistoryDAO.getLauncherHistoryByPartNumber(partNumber);
-            } else {
-                // Assuming any other type is a load/missile
-                history = movementHistoryDAO.getLoadHistoryByPartNumber(partNumber);
-            }
+
+            // Use the direct method to get all history for this part number
+            history = movementHistoryDAO.getByPartNumber(partNumber);
+
+            System.out.println("Found " + history.size() + " movements for part number: " + partNumber);
 
             if (history.isEmpty()) {
                 AlertUtils.showInformation(owner, "No Records Found",
@@ -126,6 +132,9 @@ public class MaterialHandlingController {
                 historyList.clear();
                 historyList.addAll(history);
                 historyTable.setItems(historyList);
+
+                // Force table refresh
+                historyTable.refresh();
             }
         } else {
             itemTypeLabel.setText("Unknown Part Number");
