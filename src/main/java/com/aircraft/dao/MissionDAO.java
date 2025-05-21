@@ -248,7 +248,7 @@ public class MissionDAO {
      * Retrieves a mission by flight number and aircraft.
      *
      * @param matricolaVelivolo The aircraft serial number
-     * @param numeroVolo The flight number
+     * @param numeroVolo        The flight number
      * @return The Mission object if found, null otherwise
      */
     public Mission getByFlightNumber(String matricolaVelivolo, int numeroVolo) {
@@ -420,7 +420,7 @@ public class MissionDAO {
      * Retrieves missions by date range.
      *
      * @param fromDate The start date
-     * @param toDate The end date
+     * @param toDate   The end date
      * @return A List of Mission objects within the specified date range
      */
     public List<Mission> getMissionsByDateRange(Date fromDate, Date toDate) {
@@ -459,8 +459,8 @@ public class MissionDAO {
      * Retrieves missions by aircraft and date range.
      *
      * @param matricolaVelivolo The aircraft serial number
-     * @param fromDate The start date
-     * @param toDate The end date
+     * @param fromDate          The start date
+     * @param toDate            The end date
      * @return A List of Mission objects for the specified aircraft within the date range
      */
     public List<Mission> getMissionsByAircraftAndDateRange(String matricolaVelivolo, Date fromDate, Date toDate) {
@@ -501,151 +501,152 @@ public class MissionDAO {
         return getById(id);
     }
 
-/**
- * Retrieves flight data for a specific mission.
- *
- * @param id The mission ID
- * @return Array containing [MissionID, MaxGLoad, MinGLoad, AvgAltitude, MaxSpeed, MissileStatus]
- */
-public Object[] getFlightDataForMission(int id) {
-    Connection conn = null;
-    PreparedStatement stmt = null;
-    ResultSet rs = null;
-    Object[] flightData = new Object[6]; // ID, MaxGLoad, MinGLoad, AvgAltitude, MaxSpeed, MissileStatus
+    /**
+     * Retrieves flight data for a specific mission.
+     *
+     * @param id The mission ID
+     * @return Array containing [MissionID, MaxGLoad, MinGLoad, AvgAltitude, MaxSpeed, MissileStatus]
+     */
+    public Object[] getFlightDataForMission(int id) {
+        Connection conn = null;
+        PreparedStatement stmt = null;
+        ResultSet rs = null;
+        Object[] flightData = new Object[6]; // ID, MaxGLoad, MinGLoad, AvgAltitude, MaxSpeed, MissileStatus
 
-    try {
-        conn = DBUtil.getConnection();
-        System.out.println("Fetching flight data for mission ID: " + id);
+        try {
+            conn = DBUtil.getConnection();
+            System.out.println("Fetching flight data for mission ID: " + id);
 
-        // Get mission details first
-        String sqlMission = "SELECT ID, MatricolaVelivolo, NumeroVolo FROM missione WHERE ID = ?";
-        stmt = conn.prepareStatement(sqlMission);
-        stmt.setInt(1, id);
-        rs = stmt.executeQuery();
-
-        if (rs.next()) {
-            flightData[0] = rs.getInt("ID");
-            String matricola = rs.getString("MatricolaVelivolo");
-            int numeroVolo = rs.getInt("NumeroVolo");
-
-            // Set default values
-            flightData[1] = 0.0; // MaxGLoad
-            flightData[2] = 0.0; // MinGLoad
-            flightData[3] = 0.0; // AvgAltitude
-            flightData[4] = 0.0; // MaxSpeed
-            flightData[5] = ""; // MissileStatus
-
-            rs.close();
-            stmt.close();
-
-            // Get flight data from dati_registrati - ensure we get the most recent record
-            String sqlFlightData = "SELECT GloadMax, GloadMin, QuotaMedia, VelocitaMassima, StatoMissili " +
-                               "FROM dati_registrati " +
-                               "WHERE MatricolaVelivolo = ? AND NumeroVolo = ? " +
-                               "ORDER BY ID DESC LIMIT 1";
-
-            stmt = conn.prepareStatement(sqlFlightData);
-            stmt.setString(1, matricola);
-            stmt.setInt(2, numeroVolo);
+            // Get mission details first
+            String sqlMission = "SELECT ID, MatricolaVelivolo, NumeroVolo FROM missione WHERE ID = ?";
+            stmt = conn.prepareStatement(sqlMission);
+            stmt.setInt(1, id);
             rs = stmt.executeQuery();
 
             if (rs.next()) {
-                flightData[1] = rs.getDouble("GloadMax");
-                flightData[2] = rs.getDouble("GloadMin");
-                flightData[3] = rs.getDouble("QuotaMedia");
-                flightData[4] = rs.getDouble("VelocitaMassima");
-                flightData[5] = rs.getString("StatoMissili");
+                flightData[0] = rs.getInt("ID");
+                String matricola = rs.getString("MatricolaVelivolo");
+                int numeroVolo = rs.getInt("NumeroVolo");
 
-                System.out.println("Flight data retrieved - Mission ID: " + flightData[0] +
-                                  ", MaxG: " + flightData[1] +
-                                  ", MinG: " + flightData[2] +
-                                  ", Altitude: " + flightData[3] +
-                                  ", Speed: " + flightData[4]);
-            } else {
-                System.out.println("No flight data found in dati_registrati for: " +
-                                  matricola + ", Flight: " + numeroVolo);
+                // Set default values
+                flightData[1] = 0.0; // MaxGLoad
+                flightData[2] = 0.0; // MinGLoad
+                flightData[3] = 0.0; // AvgAltitude
+                flightData[4] = 0.0; // MaxSpeed
+                flightData[5] = ""; // MissileStatus
+
+                rs.close();
+                stmt.close();
+
+                // Get flight data from dati_registrati - ensure we get the most recent record
+                String sqlFlightData = "SELECT GloadMax, GloadMin, QuotaMedia, VelocitaMassima, StatoMissili " +
+                        "FROM dati_registrati " +
+                        "WHERE MatricolaVelivolo = ? AND NumeroVolo = ? " +
+                        "ORDER BY ID DESC LIMIT 1";
+
+                stmt = conn.prepareStatement(sqlFlightData);
+                stmt.setString(1, matricola);
+                stmt.setInt(2, numeroVolo);
+                rs = stmt.executeQuery();
+
+                if (rs.next()) {
+                    flightData[1] = rs.getDouble("GloadMax");
+                    flightData[2] = rs.getDouble("GloadMin");
+                    flightData[3] = rs.getDouble("QuotaMedia");
+                    flightData[4] = rs.getDouble("VelocitaMassima");
+                    flightData[5] = rs.getString("StatoMissili");
+
+                    System.out.println("Flight data retrieved - Mission ID: " + flightData[0] +
+                            ", MaxG: " + flightData[1] +
+                            ", MinG: " + flightData[2] +
+                            ", Altitude: " + flightData[3] +
+                            ", Speed: " + flightData[4]);
+                } else {
+                    System.out.println("No flight data found in dati_registrati for: " +
+                            matricola + ", Flight: " + numeroVolo);
+                }
             }
+        } catch (SQLException e) {
+            System.err.println("Error retrieving flight data: " + e.getMessage());
+            e.printStackTrace();
+        } finally {
+            DBUtil.closeResources(conn, stmt, rs);
         }
-    } catch (SQLException e) {
-        System.err.println("Error retrieving flight data: " + e.getMessage());
-        e.printStackTrace();
-    } finally {
-        DBUtil.closeResources(conn, stmt, rs);
+
+        return flightData;
     }
 
-    return flightData;
-}
+    public List<WeaponStatus> getWeaponsForMission(int id) {
+        Connection conn = null;
+        PreparedStatement stmt = null;
+        ResultSet rs = null;
+        List<WeaponStatus> weapons = new ArrayList<>();
 
-public List<WeaponStatus> getWeaponsForMission(int id) {
-    Connection conn = null;
-    PreparedStatement stmt = null;
-    ResultSet rs = null;
-    List<WeaponStatus> weapons = new ArrayList<>();
+        try {
+            conn = DBUtil.getConnection();
+            System.out.println("Fetching weapons for mission ID: " + id);
 
-    try {
-        conn = DBUtil.getConnection();
-        System.out.println("Fetching weapons for mission ID: " + id);
+            // Get mission details first
+            String sqlMission = "SELECT MatricolaVelivolo FROM missione WHERE ID = ?";
+            stmt = conn.prepareStatement(sqlMission);
+            stmt.setInt(1, id);
+            rs = stmt.executeQuery();
 
-        // Get mission details first
-        String sqlMission = "SELECT MatricolaVelivolo FROM missione WHERE ID = ?";
-        stmt = conn.prepareStatement(sqlMission);
-        stmt.setInt(1, id);
-        rs = stmt.executeQuery();
+            String matricola = null;
+            if (rs.next()) {
+                matricola = rs.getString("MatricolaVelivolo");
+                rs.close();
+                stmt.close();
+            } else {
+                return weapons; // Return empty list if mission not found
+            }
 
-        String matricola = null;
-        if (rs.next()) {
-            matricola = rs.getString("MatricolaVelivolo");
-            rs.close();
-            stmt.close();
-        } else {
-            return weapons; // Return empty list if mission not found
+            // Join with dichiarazione_missile_gui to get firing status
+            String sqlWeapons =
+                    "SELECT sl.PosizioneVelivolo, sl.PartNumber AS LauncherPN, '' AS LauncherSN, " +
+                            "sc.PartNumber AS MissilePN, sc.Nomenclatura AS MissileName, " +
+                            "CASE WHEN dm.Missile_Sparato = 'FIRED' THEN 'FIRED' ELSE 'ONBOARD' END AS Status " +
+                            "FROM storico_lanciatore sl " +
+                            "LEFT JOIN storico_carico sc ON sl.PosizioneVelivolo = sc.PosizioneVelivolo " +
+                            "AND sl.MatricolaVelivolo = sc.MatricolaVelivolo " +
+                            "LEFT JOIN dichiarazione_missile_gui dm ON dm.PosizioneVelivolo = sl.PosizioneVelivolo " +
+                            "AND dm.ID_Missione = ? " +
+                            "WHERE sl.MatricolaVelivolo = ? " +
+                            "ORDER BY sl.PosizioneVelivolo";
+
+            stmt = conn.prepareStatement(sqlWeapons);
+            stmt.setInt(1, id);
+            stmt.setString(2, matricola);
+            rs = stmt.executeQuery();
+
+            while (rs.next()) {
+                WeaponStatus weapon = new WeaponStatus();
+                String position = rs.getString("PosizioneVelivolo");
+                weapon.setPosition(position);
+                weapon.setMissilePartNumber(rs.getString("MissilePN"));
+                weapon.setMissileName(rs.getString("MissileName"));
+                weapon.setStatus(rs.getString("Status"));
+                weapon.setLauncherPartNumber(rs.getString("LauncherPN"));
+                weapon.setLauncherSerialNumber(rs.getString("LauncherSN"));
+                weapons.add(weapon);
+            }
+
+            System.out.println("Found " + weapons.size() + " weapons for mission ID: " + id);
+        } catch (SQLException e) {
+            System.err.println("Error retrieving weapons: " + e.getMessage());
+            e.printStackTrace();
+        } finally {
+            DBUtil.closeResources(conn, stmt, rs);
         }
 
-        // Join with dichiarazione_missile_gui to get firing status
-        String sqlWeapons =
-            "SELECT sl.PosizioneVelivolo, sl.PartNumber AS LauncherPN, '' AS LauncherSN, " +
-            "sc.PartNumber AS MissilePN, sc.Nomenclatura AS MissileName, " +
-            "CASE WHEN dm.Missile_Sparato = 'FIRED' THEN 'FIRED' ELSE 'ONBOARD' END AS Status " +
-            "FROM storico_lanciatore sl " +
-            "LEFT JOIN storico_carico sc ON sl.PosizioneVelivolo = sc.PosizioneVelivolo " +
-            "AND sl.MatricolaVelivolo = sc.MatricolaVelivolo " +
-            "LEFT JOIN dichiarazione_missile_gui dm ON dm.PosizioneVelivolo = sl.PosizioneVelivolo " +
-            "AND dm.ID_Missione = ? " +
-            "WHERE sl.MatricolaVelivolo = ? " +
-            "ORDER BY sl.PosizioneVelivolo";
-
-        stmt = conn.prepareStatement(sqlWeapons);
-        stmt.setInt(1, id);
-        stmt.setString(2, matricola);
-        rs = stmt.executeQuery();
-
-        while (rs.next()) {
-            WeaponStatus weapon = new WeaponStatus();
-            String position = rs.getString("PosizioneVelivolo");
-            weapon.setPosition(position);
-            weapon.setMissilePartNumber(rs.getString("MissilePN"));
-            weapon.setMissileName(rs.getString("MissileName"));
-            weapon.setStatus(rs.getString("Status"));
-            weapon.setLauncherPartNumber(rs.getString("LauncherPN"));
-            weapon.setLauncherSerialNumber(rs.getString("LauncherSN"));
-            weapons.add(weapon);
-        }
-
-        System.out.println("Found " + weapons.size() + " weapons for mission ID: " + id);
-    } catch (SQLException e) {
-        System.err.println("Error retrieving weapons: " + e.getMessage());
-        e.printStackTrace();
-    } finally {
-        DBUtil.closeResources(conn, stmt, rs);
+        return weapons;
     }
 
-    return weapons;
-}
     /**
      * Checks if a flight number already exists for the specified aircraft.
      *
      * @param matricolaVelivolo The aircraft serial number
-     * @param numeroVolo The flight number to check
+     * @param numeroVolo        The flight number to check
      * @return true if the flight number already exists for the aircraft, false otherwise
      */
     public boolean flightNumberExists(String matricolaVelivolo, int numeroVolo) {
@@ -675,6 +676,17 @@ public List<WeaponStatus> getWeaponsForMission(int id) {
         return exists;
     }
 
+    // Helper method to set string parameters that might be null
+    private void setStringOrNull(PreparedStatement stmt, int paramIndex, String value) throws SQLException {
+        if (value != null && !value.isEmpty()) {
+            stmt.setString(paramIndex, value);
+            System.out.println("Param " + paramIndex + ": '" + value + "'");
+        } else {
+            stmt.setNull(paramIndex, java.sql.Types.VARCHAR);
+            System.out.println("Param " + paramIndex + ": NULL");
+        }
+    }
+
     /**
      * Inserts a new mission into the database and returns the generated ID.
      *
@@ -690,43 +702,92 @@ public List<WeaponStatus> getWeaponsForMission(int id) {
         try {
             conn = DBUtil.getConnection();
 
-            // Updated SQL query to include launcher and missile fields
+            // Set to true to ensure SQL errors will throw exceptions
+            conn.setAutoCommit(true);
+
+            System.out.println("MissionDAO: Starting insert operation for " + mission.getMatricolaVelivolo() +
+                    ", flight " + mission.getNumeroVolo());
+
+            // SQL query for inserting mission
             String sql = "INSERT INTO missione (MatricolaVelivolo, DataMissione, NumeroVolo, OraPartenza, OraArrivo, " +
                     "PartNumberLanciatoreP1, PartNumberMissileP1, PartNumberLanciatoreP13, PartNumberMissileP13) " +
                     "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";
 
+            System.out.println("SQL: " + sql);
             stmt = conn.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS);
-            stmt.setString(1, mission.getMatricolaVelivolo());
-            stmt.setDate(2, mission.getDataMissione());
-            stmt.setInt(3, mission.getNumeroVolo());
-            stmt.setTime(4, mission.getOraPartenza());
-            stmt.setTime(5, mission.getOraArrivo());
 
-            // Add the new parameters
-            stmt.setString(6, mission.getPartNumberLanciatoreP1());
-            stmt.setString(7, mission.getPartNumberMissileP1());
-            stmt.setString(8, mission.getPartNumberLanciatoreP13());
-            stmt.setString(9, mission.getPartNumberMissileP13());
+            // Set parameters with logging
+            int paramIndex = 1;
 
-            int rowsAffected = stmt.executeUpdate();
+            // Required parameters
+            stmt.setString(paramIndex++, mission.getMatricolaVelivolo());
+            stmt.setDate(paramIndex++, mission.getDataMissione());
+            stmt.setInt(paramIndex++, mission.getNumeroVolo());
 
-            if (rowsAffected > 0) {
-                // Get the generated ID
-                generatedKeys = stmt.getGeneratedKeys();
-                if (generatedKeys.next()) {
-                    generatedId = generatedKeys.getInt(1);
-                    mission.setId(generatedId); // Update the mission object with the ID
-                    System.out.println("Generated mission ID: " + generatedId); // Debug output
+            // Handle nullable parameters
+            if (mission.getOraPartenza() != null) {
+                stmt.setTime(paramIndex++, mission.getOraPartenza());
+                System.out.println("Param " + (paramIndex - 1) + ": " + mission.getOraPartenza());
+            } else {
+                stmt.setNull(paramIndex++, java.sql.Types.TIME);
+                System.out.println("Param " + (paramIndex - 1) + ": NULL");
+            }
+
+            if (mission.getOraArrivo() != null) {
+                stmt.setTime(paramIndex++, mission.getOraArrivo());
+                System.out.println("Param " + (paramIndex - 1) + ": " + mission.getOraArrivo());
+            } else {
+                stmt.setNull(paramIndex++, java.sql.Types.TIME);
+                System.out.println("Param " + (paramIndex - 1) + ": NULL");
+            }
+
+            // Set launcher and missile parameters - always use setNull for nulls
+            setStringOrNull(stmt, paramIndex++, mission.getPartNumberLanciatoreP1());
+            setStringOrNull(stmt, paramIndex++, mission.getPartNumberMissileP1());
+            setStringOrNull(stmt, paramIndex++, mission.getPartNumberLanciatoreP13());
+            setStringOrNull(stmt, paramIndex++, mission.getPartNumberMissileP13());
+
+            // Execute with better error detection
+            try {
+                System.out.println("Executing SQL...");
+                int rowsAffected = stmt.executeUpdate();
+                System.out.println("Insert affected " + rowsAffected + " rows");
+
+                if (rowsAffected <= 0) {
+                    System.err.println("WARNING: No rows affected by insert!");
+                    return -1;
                 }
+            } catch (SQLException e) {
+                System.err.println("SQL ERROR: " + e.getMessage());
+
+                // Check for warnings
+                SQLWarning warning = stmt.getWarnings();
+                while (warning != null) {
+                    System.err.println("SQL Warning: " + warning.getMessage());
+                    warning = warning.getNextWarning();
+                }
+
+                throw e; // Re-throw to be handled by caller
+            }
+
+            // Get the generated ID
+            generatedKeys = stmt.getGeneratedKeys();
+            if (generatedKeys.next()) {
+                generatedId = generatedKeys.getInt(1);
+                mission.setId(generatedId);
+                System.out.println("Generated mission ID: " + generatedId);
+                return generatedId;
+            } else {
+                System.err.println("No generated keys returned!");
+                return -1;
             }
         } catch (SQLException e) {
-            System.err.println("Error inserting mission with ID: " + e.getMessage());
+            System.err.println("Error inserting mission: " + e.getMessage());
             e.printStackTrace();
+            return -1;
         } finally {
             DBUtil.closeResources(conn, stmt, generatedKeys);
         }
-
-        return generatedId;
     }
 }
 

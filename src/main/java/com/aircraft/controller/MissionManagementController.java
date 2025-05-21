@@ -666,49 +666,40 @@ public class MissionManagementController {
     @FXML
     protected void onSaveAllClick(ActionEvent event) {
         Window owner = ((Node) event.getSource()).getScene().getWindow();
-        System.out.println("\n----- SAVING MISSION -----");
+        System.out.println("\n----- SAVING MISSION USING DAO -----");
 
-        // STEP 1: Validate input fields
+        // Test database connection and triggers first
+        testDirectDatabaseAccess();
+
+        // Validate input fields
         if (!validateRequiredFields(owner)) {
             return;
         }
 
-        // STEP 2: Parse flight number
-        int flightNum;
-        try {
-            flightNum = Integer.parseInt(flightNumberField.getText());
-        } catch (NumberFormatException e) {
-            AlertUtils.showError(owner, "Validation Error", "Flight number must be a valid integer");
-            return;
-        }
+        // Get basic mission data
+        Aircraft selectedAircraft = aircraftComboBox.getValue();
+        LocalDate missionDate = missionDatePicker.getValue();
+        int flightNum = Integer.parseInt(flightNumberField.getText());
 
-        // STEP 3: Validate position data (at least one position should have a launcher)
-        boolean hasAnyPosition = false;
-        for (String position : new String[]{"P1", "P13"}) {
-            if (missilePositionsData.containsKey(position)) {
-                MissionWeaponConfig config = missilePositionsData.get(position);
-                if (config != null && config.hasLauncher()) {
-                    hasAnyPosition = true;
-                    break;
+        // Debug position data - check what's actually in the missilePositionsData
+        System.out.println("DEBUG - Available positions: " +
+                (missilePositionsData != null ? missilePositionsData.keySet() : "NULL MAP"));
+        if (missilePositionsData != null) {
+            for (String pos : missilePositionsData.keySet()) {
+                MissionWeaponConfig cfg = missilePositionsData.get(pos);
+                if (cfg != null) {
+                    System.out.println("Position " + pos + ": " +
+                            "Launcher=" + cfg.getLauncherId() + ", " +
+                            "Missile=" + cfg.getWeaponId());
                 }
             }
         }
 
-        if (!hasAnyPosition) {
-            AlertUtils.showWarning(owner, "Validation Warning",
-                    "No positions configured with launchers. Continue anyway?");
-            // You might want to make this a confirmation dialog instead
-        }
-
-        // STEP 4: Get launcher and missile data for positions with better null handling
+        // Get launcher and missile data with detailed logging
         String launcherP1 = "";
         String missileP1 = "";
         String launcherP13 = "";
         String missileP13 = "";
-
-        // Get data from position configurations with detailed logging
-        System.out.println("Checking positions data - Available positions: " +
-                (missilePositionsData != null ? missilePositionsData.keySet() : "NULL MAP"));
 
         if (missilePositionsData.containsKey("P1")) {
             MissionWeaponConfig p1Config = missilePositionsData.get("P1");
@@ -716,7 +707,11 @@ public class MissionManagementController {
                 launcherP1 = p1Config.getLauncherId();
                 missileP1 = p1Config.hasWeapon() ? p1Config.getWeaponId() : "";
                 System.out.println("P1 configuration: Launcher=" + launcherP1 + ", Missile=" + missileP1);
+            } else {
+                System.out.println("P1 has no launcher or configuration is null");
             }
+        } else {
+            System.out.println("P1 position not found in missilePositionsData");
         }
 
         if (missilePositionsData.containsKey("P13")) {
@@ -725,208 +720,193 @@ public class MissionManagementController {
                 launcherP13 = p13Config.getLauncherId();
                 missileP13 = p13Config.hasWeapon() ? p13Config.getWeaponId() : "";
                 System.out.println("P13 configuration: Launcher=" + launcherP13 + ", Missile=" + missileP13);
+            } else {
+                System.out.println("P13 has no launcher or configuration is null");
             }
+        } else {
+            System.out.println("P13 position not found in missilePositionsData");
         }
 
-        // STEP 5: Database access with improved transaction and error handling
-        Aircraft selectedAircraft = aircraftComboBox.getValue();
-        LocalDate missionDate = missionDatePicker.getValue();
-
-        Connection conn = null;
-        PreparedStatement stmt = null;
-        ResultSet generatedKeys = null;
-        PreparedStatement checkStmt = null;
-        ResultSet errorRs = null;
-        boolean success = false;
-
         try {
-            // Get connection
-            conn = DBUtil.getConnection();
+            // Create Mission object with all fields
+            Mission mission = new Mission();
+            mission.setMatricolaVelivolo(selectedAircraft.getMatricolaVelivolo());
+            mission.setDataMissione(java.sql.Date.valueOf(missionDate));
+            mission.setNumeroVolo(flightNum);
 
-            // Test database connection first
-            Statement testStmt = conn.createStatement();
-            ResultSet testRs = testStmt.executeQuery("SELECT DATABASE() as db");
-            if (testRs.next()) {
-                System.out.println("Connected to database: " + testRs.getString("db"));
-            }
-            testRs.close();
-            testStmt.close();
-
-            // Disable auto-commit for transaction control
-            conn.setAutoCommit(false);
-
-            // Prepare the insert statement
-            String sql = "INSERT INTO missione (MatricolaVelivolo, DataMissione, NumeroVolo, OraPartenza, OraArrivo, " +
-                    "PartNumberLanciatoreP1, PartNumberMissileP1, PartNumberLanciatoreP13, PartNumberMissileP13) " +
-                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";
-
-            System.out.println("SQL Insert: " + sql);
-            stmt = conn.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS);
-
-            // Set parameters with detailed logging
-            System.out.println("Setting parameters:");
-            stmt.setString(1, selectedAircraft.getMatricolaVelivolo());
-            System.out.println("1. Aircraft: " + selectedAircraft.getMatricolaVelivolo());
-
-            java.sql.Date sqlDate = java.sql.Date.valueOf(missionDate);
-            stmt.setDate(2, sqlDate);
-            System.out.println("2. Date: " + sqlDate);
-
-            stmt.setInt(3, flightNum);
-            System.out.println("3. Flight Number: " + flightNum);
-
-            // Set times if provided with better validation
+            // Set times with proper validation
             if (!timeStartField.getText().isEmpty() && validateTimeField(timeStartField)) {
                 LocalTime localTimeStart = LocalTime.parse(timeStartField.getText(), timeFormatter);
-                Time sqlTimeStart = Time.valueOf(localTimeStart);
-                stmt.setTime(4, sqlTimeStart);
-                System.out.println("4. Start Time: " + sqlTimeStart);
+                mission.setOraPartenza(Time.valueOf(localTimeStart));
+                System.out.println("Setting departure time: " + mission.getOraPartenza());
             } else {
-                stmt.setNull(4, java.sql.Types.TIME);
-                System.out.println("4. Start Time: NULL");
+                mission.setOraPartenza(null);
+                System.out.println("Setting departure time: NULL");
             }
 
             if (!timeFinishField.getText().isEmpty() && validateTimeField(timeFinishField)) {
                 LocalTime localTimeFinish = LocalTime.parse(timeFinishField.getText(), timeFormatter);
-                Time sqlTimeFinish = Time.valueOf(localTimeFinish);
-                stmt.setTime(5, sqlTimeFinish);
-                System.out.println("5. Finish Time: " + sqlTimeFinish);
+                mission.setOraArrivo(Time.valueOf(localTimeFinish));
+                System.out.println("Setting arrival time: " + mission.getOraArrivo());
             } else {
-                stmt.setNull(5, java.sql.Types.TIME);
-                System.out.println("5. Finish Time: NULL");
+                mission.setOraArrivo(null);
+                System.out.println("Setting arrival time: NULL");
             }
 
-            // Set launcher and missile part numbers with proper null handling
+            // Set launcher and missile values - explicitly handle empty strings vs nulls
+            System.out.println("Setting launcher/missile data:");
+
             if (!launcherP1.isEmpty()) {
-                stmt.setString(6, launcherP1);
-                System.out.println("6. Launcher P1: " + launcherP1);
+                mission.setPartNumberLanciatoreP1(launcherP1);
+                System.out.println("- P1 Launcher: " + launcherP1);
             } else {
-                stmt.setNull(6, java.sql.Types.VARCHAR);
-                System.out.println("6. Launcher P1: NULL");
+                mission.setPartNumberLanciatoreP1(null);
+                System.out.println("- P1 Launcher: NULL");
             }
 
             if (!missileP1.isEmpty()) {
-                stmt.setString(7, missileP1);
-                System.out.println("7. Missile P1: " + missileP1);
+                mission.setPartNumberMissileP1(missileP1);
+                System.out.println("- P1 Missile: " + missileP1);
             } else {
-                stmt.setNull(7, java.sql.Types.VARCHAR);
-                System.out.println("7. Missile P1: NULL");
+                mission.setPartNumberMissileP1(null);
+                System.out.println("- P1 Missile: NULL");
             }
 
             if (!launcherP13.isEmpty()) {
-                stmt.setString(8, launcherP13);
-                System.out.println("8. Launcher P13: " + launcherP13);
+                mission.setPartNumberLanciatoreP13(launcherP13);
+                System.out.println("- P13 Launcher: " + launcherP13);
             } else {
-                stmt.setNull(8, java.sql.Types.VARCHAR);
-                System.out.println("8. Launcher P13: NULL");
+                mission.setPartNumberLanciatoreP13(null);
+                System.out.println("- P13 Launcher: NULL");
             }
 
             if (!missileP13.isEmpty()) {
-                stmt.setString(9, missileP13);
-                System.out.println("9. Missile P13: " + missileP13);
+                mission.setPartNumberMissileP13(missileP13);
+                System.out.println("- P13 Missile: " + missileP13);
             } else {
-                stmt.setNull(9, java.sql.Types.VARCHAR);
-                System.out.println("9. Missile P13: NULL");
+                mission.setPartNumberMissileP13(null);
+                System.out.println("- P13 Missile: NULL");
             }
 
-            // Execute the insert
-            System.out.println("Executing statement...");
-            int rowsAffected = stmt.executeUpdate();
-            System.out.println("Insert affected " + rowsAffected + " rows");
+            // Save using DAO with longer timeout for triggers
+            System.out.println("Calling MissionDAO.insertAndGetId...");
+            int missionId = missionDAO.insertAndGetId(mission);
+            System.out.println("DAO returned missionId: " + missionId);
 
-            // Get the generated mission ID
-            if (rowsAffected > 0) {
-                generatedKeys = stmt.getGeneratedKeys();
-                if (generatedKeys.next()) {
-                    int missionId = generatedKeys.getInt(1);
-                    System.out.println("Mission saved with ID: " + missionId);
+            if (missionId > 0) {
+                System.out.println("Mission saved successfully with ID: " + missionId);
 
-                    // Wait a moment for triggers to execute
-                    try {
-                        Thread.sleep(100);
-                    } catch (InterruptedException e) {
-                        // Ignore
-                    }
+                // Allow time for triggers to execute - increased timeout
+                System.out.println("Waiting for triggers to complete...");
+                Thread.sleep(500);
 
-                    // Check for trigger errors in error_log table
-                    String errorQuery = "SELECT * FROM error_log WHERE error_message LIKE ? ORDER BY id DESC LIMIT 1";
-                    checkStmt = conn.prepareStatement(errorQuery);
-                    checkStmt.setString(1, "%mission ID: " + missionId + "%");
-                    errorRs = checkStmt.executeQuery();
+                // Check error_log for any trigger issues
+                checkErrorLog(missionId);
 
-                    if (errorRs.next()) {
-                        // Trigger error occurred
-                        String errorMsg = errorRs.getString("error_message");
-                        System.out.println("Trigger error detected: " + errorMsg);
-                        conn.rollback();
-                        AlertUtils.showError(owner, "Database Error", "Mission insert failed: " + errorMsg);
-                        return;
-                    }
+                // Count configured positions
+                int positionsCount = 0;
+                if (!launcherP1.isEmpty()) positionsCount++;
+                if (!launcherP13.isEmpty()) positionsCount++;
 
-                    // No errors found, explicitly commit the transaction
-                    conn.commit();
-                    System.out.println("Transaction committed successfully");
-                    success = true;
-
-                    // Count configured positions
-                    int positionsCount = 0;
-                    if (!launcherP1.isEmpty()) positionsCount++;
-                    if (!launcherP13.isEmpty()) positionsCount++;
-
-                    // Create success message
-                    String message = "Mission saved successfully";
-                    if (positionsCount > 0) {
-                        message += " with " + positionsCount + " configured positions";
-                    }
-                    message += ". ID: " + missionId;
-
-                    AlertUtils.showInformation(owner, "Success", message);
-
-                    // Clear form
-                    clearForm();
-                } else {
-                    conn.rollback();
-                    System.out.println("Rolled back - could not retrieve generated key");
-                    AlertUtils.showError(owner, "Error", "Could not get mission ID");
+                // Create success message
+                String message = "Mission saved successfully";
+                if (positionsCount > 0) {
+                    message += " with " + positionsCount + " configured positions";
                 }
-            } else {
-                conn.rollback();
-                System.out.println("Rolled back - no rows affected");
-                AlertUtils.showError(owner, "Error", "Failed to save mission");
-            }
-        } catch (SQLException e) {
-            // Rollback on error
-            try {
-                if (conn != null) conn.rollback();
-                System.out.println("Transaction rolled back due to error");
-            } catch (SQLException ex) {
-                ex.printStackTrace();
-            }
+                message += ". ID: " + missionId;
 
-            System.err.println("SQL Error: " + e.getMessage());
+                AlertUtils.showInformation(owner, "Success", message);
+
+                // Clear form
+                clearForm();
+            } else {
+                System.out.println("Failed to save mission - DAO returned ID <= 0");
+                AlertUtils.showError(owner, "Error", "Failed to save mission. Check console for details.");
+            }
+        } catch (Exception e) {
+            System.err.println("Error saving mission: " + e.getMessage());
             e.printStackTrace();
             AlertUtils.showError(owner, "Database Error", "Error saving mission: " + e.getMessage());
+        }
+
+        System.out.println("----- SAVE MISSION COMPLETED -----\n");
+    }
+
+    /**
+     * Check error_log for any trigger issues
+     */
+    private void checkErrorLog(int missionId) {
+        Connection conn = null;
+        PreparedStatement stmt = null;
+        ResultSet rs = null;
+
+        try {
+            conn = DBUtil.getConnection();
+            String query = "SELECT * FROM error_log WHERE error_message LIKE ? ORDER BY id DESC LIMIT 10";
+            stmt = conn.prepareStatement(query);
+            stmt.setString(1, "%" + missionId + "%");
+
+            rs = stmt.executeQuery();
+            System.out.println("Checking error log for mission ID " + missionId + ":");
+
+            while (rs.next()) {
+                System.out.println("  - [" + rs.getString("error_source") + "] " + rs.getString("error_message"));
+            }
+        } catch (SQLException e) {
+            System.err.println("Error checking error log: " + e.getMessage());
         } finally {
-            // Close resources
-            if (errorRs != null) {
-                try {
-                    errorRs.close();
-                } catch (SQLException e) {
-                    e.printStackTrace();
-                }
-            }
-            if (checkStmt != null) {
-                try {
-                    checkStmt.close();
-                } catch (SQLException e) {
-                    e.printStackTrace();
-                }
-            }
-            DBUtil.closeResources(conn, stmt, generatedKeys);
-            System.out.println("----- SAVE MISSION COMPLETED -----\n");
+            DBUtil.closeResources(conn, stmt, rs);
         }
     }
 
+    /**
+     * Debug method to test direct database connection
+     */
+    private void testDirectDatabaseAccess() {
+        Connection conn = null;
+        Statement stmt = null;
+        ResultSet rs = null;
+
+        try {
+            conn = DBUtil.getConnection();
+
+            // Show database name
+            stmt = conn.createStatement();
+            rs = stmt.executeQuery("SELECT DATABASE()");
+            if (rs.next()) {
+                System.out.println("Connected to database: " + rs.getString(1));
+            }
+            rs.close();
+
+            // Check table structure
+            rs = stmt.executeQuery("DESCRIBE missione");
+            System.out.println("Missione table structure:");
+            while (rs.next()) {
+                System.out.println("- " + rs.getString("Field") + ": " + rs.getString("Type"));
+            }
+            rs.close();
+
+            // Check triggers
+            rs = stmt.executeQuery("SHOW TRIGGERS WHERE `Table` = 'missione'");
+            System.out.println("Database triggers on missione table:");
+            boolean hasTriggers = false;
+            while (rs.next()) {
+                hasTriggers = true;
+                System.out.println("- " + rs.getString("Trigger") + " (" + rs.getString("Timing") + " " +
+                        rs.getString("Event") + ")");
+            }
+
+            if (!hasTriggers) {
+                System.out.println("WARNING: No triggers found on missione table!");
+            }
+
+        } catch (SQLException e) {
+            System.err.println("Database test failed: " + e.getMessage());
+            e.printStackTrace();
+        } finally {
+            DBUtil.closeResources(conn, stmt, rs);
+        }
+    }
     // Test direct insertion
     public void testDirectInsert() {
         System.out.println("Testing direct mission insert");
