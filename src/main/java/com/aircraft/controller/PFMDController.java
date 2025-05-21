@@ -213,12 +213,16 @@ public class PFMDController {
     /**
      * Loads aircraft data into the aircraft combo box.
      */
+
     private void loadAircraftData() {
         List<Aircraft> aircraftList = aircraftDAO.getAll();
         ObservableList<String> aircraftOptions = FXCollections.observableArrayList();
 
+        System.out.println("Available aircraft:");
         for (Aircraft aircraft : aircraftList) {
-            aircraftOptions.add(aircraft.getMatricolaVelivolo());
+            String matricola = aircraft.getMatricolaVelivolo();
+            aircraftOptions.add(matricola);
+            System.out.println("- " + matricola);
         }
 
         aircraftComboBox.setItems(aircraftOptions);
@@ -266,25 +270,9 @@ public class PFMDController {
             // Set items and check if list is empty
             missionComboBox.setItems(missionOptions);
 
-            // Log if no missions were found
             if (missionOptions.isEmpty()) {
-                // Try a direct query from missione table to see if there are any missions
-                // that might not be appearing in the view
                 System.out.println("No missions found in vista_gui_missione for aircraft: " + matricolaVelivolo);
-
-                DBUtil.closeResources(null, statement, resultSet);
-                String directQuery = "SELECT ID, NumeroVolo FROM missione WHERE MatricolaVelivolo = ?";
-                statement = connection.prepareStatement(directQuery);
-                statement.setString(1, matricolaVelivolo);
-                resultSet = statement.executeQuery();
-
-                boolean hasMissions = resultSet.next();
-                if (hasMissions) {
-                    System.out.println("NOTE: Found missions in missione table but not in vista_gui_missione view. " +
-                            "This could indicate an issue with the view or its triggers.");
-                }
             }
-
         } catch (SQLException e) {
             Window owner = aircraftComboBox.getScene().getWindow();
             AlertUtils.showError(owner, "Database Error", "Failed to load missions: " + e.getMessage());

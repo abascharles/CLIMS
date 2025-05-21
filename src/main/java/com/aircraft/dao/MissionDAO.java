@@ -637,7 +637,7 @@ public List<WeaponStatus> getWeaponsForMission(int id) {
             stmt.setInt(2, numeroVolo);
 
             rs = stmt.executeQuery();
-            exists = rs.next();
+            exists = rs.next(); // If rs.next() returns true, a record was found
         } catch (SQLException e) {
             System.err.println("Error checking flight number existence: " + e.getMessage());
             e.printStackTrace();
