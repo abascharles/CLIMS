@@ -605,10 +605,12 @@ public class MissionManagementController {
     // Helper method to extract part number from dropdown text
     private String extractPartNumber(String dropdownValue) {
         // Extract part number from format "Name (PartNumber)"
-        if (dropdownValue.contains("(") && dropdownValue.contains(")")) {
+        if (dropdownValue != null && dropdownValue.contains("(") && dropdownValue.contains(")")) {
             int start = dropdownValue.lastIndexOf("(") + 1;
             int end = dropdownValue.lastIndexOf(")");
-            return dropdownValue.substring(start, end);
+            if (start < end) {
+                return dropdownValue.substring(start, end);
+            }
         }
         return dropdownValue; // Return as is if no parentheses
     }
@@ -676,7 +678,7 @@ public class MissionManagementController {
             }
         }
 
-        // Direct database access with explicit transaction management
+        // Direct database access with improved error handling
         Connection conn = null;
         PreparedStatement stmt = null;
         ResultSet generatedKeys = null;
@@ -851,6 +853,35 @@ public class MissionManagementController {
             e.printStackTrace();
         } finally {
             DBUtil.closeResources(conn, stmt, null);
+        }
+    }
+
+    private void testDatabaseConnection() {
+        Connection conn = null;
+        Statement stmt = null;
+        ResultSet rs = null;
+
+        try {
+            conn = DBUtil.getConnection();
+            stmt = conn.createStatement();
+
+            // Test query
+            rs = stmt.executeQuery("SELECT COUNT(*) as count FROM matricola_velivolo");
+            if (rs.next()) {
+                System.out.println("Database connection success - Aircraft count: " + rs.getInt("count"));
+            }
+
+            // Test available aircraft
+            rs = stmt.executeQuery("SELECT MatricolaVelivolo FROM matricola_velivolo");
+            System.out.println("Available aircraft in database:");
+            while (rs.next()) {
+                System.out.println("- " + rs.getString("MatricolaVelivolo"));
+            }
+        } catch (SQLException e) {
+            System.err.println("Database connection test failed: " + e.getMessage());
+            e.printStackTrace();
+        } finally {
+            DBUtil.closeResources(conn, stmt, rs);
         }
     }
 
