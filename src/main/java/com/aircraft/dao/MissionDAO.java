@@ -702,90 +702,107 @@ public class MissionDAO {
         try {
             conn = DBUtil.getConnection();
 
-            // Set to true to ensure SQL errors will throw exceptions
-            conn.setAutoCommit(true);
+            // Critical: Set to false for transaction control
+            conn.setAutoCommit(false);
 
-            System.out.println("MissionDAO: Starting insert operation for " + mission.getMatricolaVelivolo() +
-                    ", flight " + mission.getNumeroVolo());
+            System.out.println("MissionDAO: Starting transaction for mission insert");
 
-            // SQL query for inserting mission
             String sql = "INSERT INTO missione (MatricolaVelivolo, DataMissione, NumeroVolo, OraPartenza, OraArrivo, " +
                     "PartNumberLanciatoreP1, PartNumberMissileP1, PartNumberLanciatoreP13, PartNumberMissileP13) " +
                     "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";
 
-            System.out.println("SQL: " + sql);
             stmt = conn.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS);
 
-            // Set parameters with logging
-            int paramIndex = 1;
+            // Set parameters
+            stmt.setString(1, mission.getMatricolaVelivolo());
+            stmt.setDate(2, mission.getDataMissione());
+            stmt.setInt(3, mission.getNumeroVolo());
 
-            // Required parameters
-            stmt.setString(paramIndex++, mission.getMatricolaVelivolo());
-            stmt.setDate(paramIndex++, mission.getDataMissione());
-            stmt.setInt(paramIndex++, mission.getNumeroVolo());
-
-            // Handle nullable parameters
+            // Handle nullable time values
             if (mission.getOraPartenza() != null) {
-                stmt.setTime(paramIndex++, mission.getOraPartenza());
-                System.out.println("Param " + (paramIndex - 1) + ": " + mission.getOraPartenza());
+                stmt.setTime(4, mission.getOraPartenza());
             } else {
-                stmt.setNull(paramIndex++, java.sql.Types.TIME);
-                System.out.println("Param " + (paramIndex - 1) + ": NULL");
+                stmt.setNull(4, java.sql.Types.TIME);
             }
 
             if (mission.getOraArrivo() != null) {
-                stmt.setTime(paramIndex++, mission.getOraArrivo());
-                System.out.println("Param " + (paramIndex - 1) + ": " + mission.getOraArrivo());
+                stmt.setTime(5, mission.getOraArrivo());
             } else {
-                stmt.setNull(paramIndex++, java.sql.Types.TIME);
-                System.out.println("Param " + (paramIndex - 1) + ": NULL");
+                stmt.setNull(5, java.sql.Types.TIME);
             }
 
-            // Set launcher and missile parameters - always use setNull for nulls
-            setStringOrNull(stmt, paramIndex++, mission.getPartNumberLanciatoreP1());
-            setStringOrNull(stmt, paramIndex++, mission.getPartNumberMissileP1());
-            setStringOrNull(stmt, paramIndex++, mission.getPartNumberLanciatoreP13());
-            setStringOrNull(stmt, paramIndex++, mission.getPartNumberMissileP13());
-
-            // Execute with better error detection
-            try {
-                System.out.println("Executing SQL...");
-                int rowsAffected = stmt.executeUpdate();
-                System.out.println("Insert affected " + rowsAffected + " rows");
-
-                if (rowsAffected <= 0) {
-                    System.err.println("WARNING: No rows affected by insert!");
-                    return -1;
-                }
-            } catch (SQLException e) {
-                System.err.println("SQL ERROR: " + e.getMessage());
-
-                // Check for warnings
-                SQLWarning warning = stmt.getWarnings();
-                while (warning != null) {
-                    System.err.println("SQL Warning: " + warning.getMessage());
-                    warning = warning.getNextWarning();
-                }
-
-                throw e; // Re-throw to be handled by caller
+            // Set launcher and missile parameters
+            if (mission.getPartNumberLanciatoreP1() != null && !mission.getPartNumberLanciatoreP1().isEmpty()) {
+                stmt.setString(6, mission.getPartNumberLanciatoreP1());
+            } else {
+                stmt.setNull(6, java.sql.Types.VARCHAR);
             }
 
-            // Get the generated ID
+            if (mission.getPartNumberMissileP1() != null && !mission.getPartNumberMissileP1().isEmpty()) {
+                stmt.setString(7, mission.getPartNumberMissileP1());
+            } else {
+                stmt.setNull(7, java.sql.Types.VARCHAR);
+            }
+
+            if (mission.getPartNumberLanciatoreP13() != null && !mission.getPartNumberLanciatoreP13().isEmpty()) {
+                stmt.setString(8, mission.getPartNumberLanciatoreP13());
+            } else {
+                stmt.setNull(8, java.sql.Types.VARCHAR);
+            }
+
+            if (mission.getPartNumberMissileP13() != null && !mission.getPartNumberMissileP13().isEmpty()) {
+                stmt.setString(9, mission.getPartNumberMissileP13());
+            } else {
+                stmt.setNull(9, java.sql.Types.VARCHAR);
+            }
+
+            // Execute the insert
+            int rowsAffected = stmt.executeUpdate();
+
+            if (rowsAffected <= 0) {
+                conn.rollback();
+                System.err.println("Insert failed - rolling back transaction");
+                return -1;
+            }
+
+            // Get the generated key
             generatedKeys = stmt.getGeneratedKeys();
             if (generatedKeys.next()) {
                 generatedId = generatedKeys.getInt(1);
                 mission.setId(generatedId);
-                System.out.println("Generated mission ID: " + generatedId);
+
+                // IMPORTANT: Wait a bit to allow triggers to execute
+                try {
+                    Thread.sleep(200);
+                } catch (InterruptedException e) {
+                    System.err.println("Sleep interrupted: " + e.getMessage());
+                }
+
+                // Commit the transaction
+                conn.commit();
+                System.out.println("Transaction committed successfully. Mission ID: " + generatedId);
                 return generatedId;
             } else {
-                System.err.println("No generated keys returned!");
+                conn.rollback();
+                System.err.println("No ID generated - rolling back transaction");
                 return -1;
             }
         } catch (SQLException e) {
+            try {
+                if (conn != null) conn.rollback();
+                System.err.println("Error occurred - rolling back transaction");
+            } catch (SQLException ex) {
+                System.err.println("Error during rollback: " + ex.getMessage());
+            }
             System.err.println("Error inserting mission: " + e.getMessage());
             e.printStackTrace();
             return -1;
         } finally {
+            try {
+                if (conn != null) conn.setAutoCommit(true);
+            } catch (SQLException e) {
+                System.err.println("Error resetting auto-commit: " + e.getMessage());
+            }
             DBUtil.closeResources(conn, stmt, generatedKeys);
         }
     }

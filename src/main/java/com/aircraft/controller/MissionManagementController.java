@@ -675,25 +675,14 @@ public class MissionManagementController {
         if (!validateRequiredFields(owner)) {
             return;
         }
+        if (!validatePartNumbers(owner)) {
+            return;
+        }
 
         // Get basic mission data
         Aircraft selectedAircraft = aircraftComboBox.getValue();
         LocalDate missionDate = missionDatePicker.getValue();
         int flightNum = Integer.parseInt(flightNumberField.getText());
-
-        // Debug position data - check what's actually in the missilePositionsData
-        System.out.println("DEBUG - Available positions: " +
-                (missilePositionsData != null ? missilePositionsData.keySet() : "NULL MAP"));
-        if (missilePositionsData != null) {
-            for (String pos : missilePositionsData.keySet()) {
-                MissionWeaponConfig cfg = missilePositionsData.get(pos);
-                if (cfg != null) {
-                    System.out.println("Position " + pos + ": " +
-                            "Launcher=" + cfg.getLauncherId() + ", " +
-                            "Missile=" + cfg.getWeaponId());
-                }
-            }
-        }
 
         // Get launcher and missile data with detailed logging
         String launcherP1 = "";
@@ -701,17 +690,14 @@ public class MissionManagementController {
         String launcherP13 = "";
         String missileP13 = "";
 
+        // Extract configuration data for P1 and P13
         if (missilePositionsData.containsKey("P1")) {
             MissionWeaponConfig p1Config = missilePositionsData.get("P1");
             if (p1Config != null && p1Config.hasLauncher()) {
                 launcherP1 = p1Config.getLauncherId();
                 missileP1 = p1Config.hasWeapon() ? p1Config.getWeaponId() : "";
                 System.out.println("P1 configuration: Launcher=" + launcherP1 + ", Missile=" + missileP1);
-            } else {
-                System.out.println("P1 has no launcher or configuration is null");
             }
-        } else {
-            System.out.println("P1 position not found in missilePositionsData");
         }
 
         if (missilePositionsData.containsKey("P13")) {
@@ -720,11 +706,7 @@ public class MissionManagementController {
                 launcherP13 = p13Config.getLauncherId();
                 missileP13 = p13Config.hasWeapon() ? p13Config.getWeaponId() : "";
                 System.out.println("P13 configuration: Launcher=" + launcherP13 + ", Missile=" + missileP13);
-            } else {
-                System.out.println("P13 has no launcher or configuration is null");
             }
-        } else {
-            System.out.println("P13 position not found in missilePositionsData");
         }
 
         try {
@@ -738,57 +720,24 @@ public class MissionManagementController {
             if (!timeStartField.getText().isEmpty() && validateTimeField(timeStartField)) {
                 LocalTime localTimeStart = LocalTime.parse(timeStartField.getText(), timeFormatter);
                 mission.setOraPartenza(Time.valueOf(localTimeStart));
-                System.out.println("Setting departure time: " + mission.getOraPartenza());
             } else {
                 mission.setOraPartenza(null);
-                System.out.println("Setting departure time: NULL");
             }
 
             if (!timeFinishField.getText().isEmpty() && validateTimeField(timeFinishField)) {
                 LocalTime localTimeFinish = LocalTime.parse(timeFinishField.getText(), timeFormatter);
                 mission.setOraArrivo(Time.valueOf(localTimeFinish));
-                System.out.println("Setting arrival time: " + mission.getOraArrivo());
             } else {
                 mission.setOraArrivo(null);
-                System.out.println("Setting arrival time: NULL");
             }
 
-            // Set launcher and missile values - explicitly handle empty strings vs nulls
-            System.out.println("Setting launcher/missile data:");
+            // Set launcher and missile values
+            mission.setPartNumberLanciatoreP1(launcherP1.isEmpty() ? null : launcherP1);
+            mission.setPartNumberMissileP1(missileP1.isEmpty() ? null : missileP1);
+            mission.setPartNumberLanciatoreP13(launcherP13.isEmpty() ? null : launcherP13);
+            mission.setPartNumberMissileP13(missileP13.isEmpty() ? null : missileP13);
 
-            if (!launcherP1.isEmpty()) {
-                mission.setPartNumberLanciatoreP1(launcherP1);
-                System.out.println("- P1 Launcher: " + launcherP1);
-            } else {
-                mission.setPartNumberLanciatoreP1(null);
-                System.out.println("- P1 Launcher: NULL");
-            }
-
-            if (!missileP1.isEmpty()) {
-                mission.setPartNumberMissileP1(missileP1);
-                System.out.println("- P1 Missile: " + missileP1);
-            } else {
-                mission.setPartNumberMissileP1(null);
-                System.out.println("- P1 Missile: NULL");
-            }
-
-            if (!launcherP13.isEmpty()) {
-                mission.setPartNumberLanciatoreP13(launcherP13);
-                System.out.println("- P13 Launcher: " + launcherP13);
-            } else {
-                mission.setPartNumberLanciatoreP13(null);
-                System.out.println("- P13 Launcher: NULL");
-            }
-
-            if (!missileP13.isEmpty()) {
-                mission.setPartNumberMissileP13(missileP13);
-                System.out.println("- P13 Missile: " + missileP13);
-            } else {
-                mission.setPartNumberMissileP13(null);
-                System.out.println("- P13 Missile: NULL");
-            }
-
-            // Save using DAO with longer timeout for triggers
+            // Save using DAO
             System.out.println("Calling MissionDAO.insertAndGetId...");
             int missionId = missionDAO.insertAndGetId(mission);
             System.out.println("DAO returned missionId: " + missionId);
@@ -796,9 +745,28 @@ public class MissionManagementController {
             if (missionId > 0) {
                 System.out.println("Mission saved successfully with ID: " + missionId);
 
-                // Allow time for triggers to execute - increased timeout
-                System.out.println("Waiting for triggers to complete...");
+                // Wait a moment for triggers to execute
                 Thread.sleep(500);
+
+                // Run diagnostics
+                runPostInsertDiagnostics(missionId);
+
+                // Check if dichiarazione_missile_gui entries were created
+                boolean entriesCreated = checkDichiarazioniCreated(missionId);
+
+                if (!entriesCreated) {
+                    System.out.println("Triggers failed to create missile declarations, inserting manually");
+
+                    // Insert manually for P1
+                    if (!missileP1.isEmpty()) {
+                        insertMissileDichiarazioniManually(missionId, "P1", missileP1);
+                    }
+
+                    // Insert manually for P13
+                    if (!missileP13.isEmpty()) {
+                        insertMissileDichiarazioniManually(missionId, "P13", missileP13);
+                    }
+                }
 
                 // Check error_log for any trigger issues
                 checkErrorLog(missionId);
@@ -831,7 +799,113 @@ public class MissionManagementController {
 
         System.out.println("----- SAVE MISSION COMPLETED -----\n");
     }
+    /**
+     * Checks if dichiarazione_missile_gui entries were created for a mission
+     */
+    private boolean checkDichiarazioniCreated(int missionId) {
+        Connection conn = null;
+        PreparedStatement stmt = null;
+        ResultSet rs = null;
 
+        try {
+            conn = DBUtil.getConnection();
+            String sql = "SELECT COUNT(*) FROM dichiarazione_missile_gui WHERE ID_Missione = ?";
+            stmt = conn.prepareStatement(sql);
+            stmt.setInt(1, missionId);
+            rs = stmt.executeQuery();
+
+            if (rs.next()) {
+                int count = rs.getInt(1);
+                System.out.println("Found " + count + " dichiarazione entries for mission " + missionId);
+                return count > 0;
+            }
+            return false;
+        } catch (SQLException e) {
+            System.err.println("Error checking dichiarazioni: " + e.getMessage());
+            return false;
+        } finally {
+            DBUtil.closeResources(conn, stmt, rs);
+        }
+    }
+
+    /**
+     * Performs comprehensive validation after a mission insert
+     */
+    private void runPostInsertDiagnostics(int missionId) {
+        Connection conn = null;
+        Statement stmt = null;
+        ResultSet rs = null;
+
+        try {
+            conn = DBUtil.getConnection();
+            stmt = conn.createStatement();
+
+            System.out.println("\n--- POST-INSERT DIAGNOSTICS FOR MISSION ID " + missionId + " ---");
+
+            // Check mission record
+            rs = stmt.executeQuery("SELECT * FROM missione WHERE ID = " + missionId);
+            if (rs.next()) {
+                System.out.println("Mission record exists with correct ID");
+                System.out.println("- MatricolaVelivolo: " + rs.getString("MatricolaVelivolo"));
+                System.out.println("- P1 Launcher: " + rs.getString("PartNumberLanciatoreP1"));
+                System.out.println("- P1 Missile: " + rs.getString("PartNumberMissileP1"));
+                System.out.println("- P13 Launcher: " + rs.getString("PartNumberLanciatoreP13"));
+                System.out.println("- P13 Missile: " + rs.getString("PartNumberMissileP13"));
+            } else {
+                System.out.println("CRITICAL ERROR: Mission record not found after insert!");
+            }
+            rs.close();
+
+            // Check dichiarazione_missile_gui
+            rs = stmt.executeQuery("SELECT * FROM dichiarazione_missile_gui WHERE ID_Missione = " + missionId);
+            System.out.println("\nDichiarazione_missile_gui entries:");
+            boolean hasDichiarazioni = false;
+            while (rs.next()) {
+                hasDichiarazioni = true;
+                System.out.println("- ID: " + rs.getInt("ID"));
+                System.out.println("  Position: " + rs.getString("PosizioneVelivolo"));
+                System.out.println("  Status: " + rs.getString("Missile_Sparato"));
+            }
+            if (!hasDichiarazioni) {
+                System.out.println("WARNING: No dichiarazione_missile_gui entries found!");
+            }
+            rs.close();
+
+            // Check storico_carico and storico_lanciatore entries
+            System.out.println("\nStorico entries:");
+            rs = stmt.executeQuery("SELECT * FROM storico_carico WHERE DataImbarco = '" +
+                    java.sql.Date.valueOf(missionDatePicker.getValue()) + "' AND " +
+                    "MatricolaVelivolo = '" + aircraftComboBox.getValue().getMatricolaVelivolo() + "'");
+            boolean hasStorico = false;
+            while (rs.next()) {
+                hasStorico = true;
+                System.out.println("- Carico ID: " + rs.getInt("ID"));
+                System.out.println("  Position: " + rs.getString("PosizioneVelivolo"));
+                System.out.println("  PartNumber: " + rs.getString("PartNumber"));
+            }
+
+            rs = stmt.executeQuery("SELECT * FROM storico_lanciatore WHERE DataInstallazione = '" +
+                    java.sql.Date.valueOf(missionDatePicker.getValue()) + "' AND " +
+                    "MatricolaVelivolo = '" + aircraftComboBox.getValue().getMatricolaVelivolo() + "'");
+            while (rs.next()) {
+                hasStorico = true;
+                System.out.println("- Lanciatore ID: " + rs.getInt("ID"));
+                System.out.println("  Position: " + rs.getString("PosizioneVelivolo"));
+                System.out.println("  PartNumber: " + rs.getString("PartNumber"));
+            }
+
+            if (!hasStorico) {
+                System.out.println("WARNING: No storico entries found!");
+            }
+
+            System.out.println("\n--- END DIAGNOSTICS ---\n");
+
+        } catch (SQLException e) {
+            System.err.println("Error in post-insert diagnostics: " + e.getMessage());
+        } finally {
+            DBUtil.closeResources(conn, stmt, rs);
+        }
+    }
     /**
      * Check error_log for any trigger issues
      */
@@ -907,6 +981,84 @@ public class MissionManagementController {
             DBUtil.closeResources(conn, stmt, rs);
         }
     }
+    /**
+     * Manually inserts missile declarations if the trigger fails
+     */
+    private void insertMissileDichiarazioniManually(int missionId, String position, String missilePartNumber) {
+        Connection conn = null;
+        PreparedStatement stmt = null;
+
+        try {
+            conn = DBUtil.getConnection();
+            String sql = "INSERT INTO dichiarazione_missile_gui (ID_Missione, PosizioneVelivolo, Missile_Sparato) " +
+                    "VALUES (?, ?, 'NO')";
+            stmt = conn.prepareStatement(sql);
+            stmt.setInt(1, missionId);
+            stmt.setString(2, position);
+
+            int rows = stmt.executeUpdate();
+            System.out.println("Manually inserted " + rows + " missile declaration entries");
+        } catch (SQLException e) {
+            System.err.println("Error manually inserting missile declaration: " + e.getMessage());
+        } finally {
+            DBUtil.closeResources(conn, stmt, null);
+        }
+    }
+
+    /**
+     * Validates that the launcher and missile part numbers exist in the database.
+     * @return true if all part numbers are valid or empty, false otherwise
+     */
+    private boolean validatePartNumbers(Window owner) {
+        // Check P1 launcher if specified
+        if (missilePositionsData.containsKey("P1")) {
+            MissionWeaponConfig p1Config = missilePositionsData.get("P1");
+            if (p1Config != null && p1Config.hasLauncher()) {
+                String launcherId = p1Config.getLauncherId();
+                if (!launcherDAO.exists(launcherId)) {
+                    AlertUtils.showError(owner, "Invalid Part Number",
+                            "Launcher part number '" + launcherId + "' for position P1 does not exist in the database");
+                    return false;
+                }
+
+                // Check missile if specified
+                if (p1Config.hasWeapon()) {
+                    String missileId = p1Config.getWeaponId();
+                    if (!weaponDAO.exists(missileId)) {
+                        AlertUtils.showError(owner, "Invalid Part Number",
+                                "Missile part number '" + missileId + "' for position P1 does not exist in the database");
+                        return false;
+                    }
+                }
+            }
+        }
+
+        // Check P13 launcher if specified
+        if (missilePositionsData.containsKey("P13")) {
+            MissionWeaponConfig p13Config = missilePositionsData.get("P13");
+            if (p13Config != null && p13Config.hasLauncher()) {
+                String launcherId = p13Config.getLauncherId();
+                if (!launcherDAO.exists(launcherId)) {
+                    AlertUtils.showError(owner, "Invalid Part Number",
+                            "Launcher part number '" + launcherId + "' for position P13 does not exist in the database");
+                    return false;
+                }
+
+                // Check missile if specified
+                if (p13Config.hasWeapon()) {
+                    String missileId = p13Config.getWeaponId();
+                    if (!weaponDAO.exists(missileId)) {
+                        AlertUtils.showError(owner, "Invalid Part Number",
+                                "Missile part number '" + missileId + "' for position P13 does not exist in the database");
+                        return false;
+                    }
+                }
+            }
+        }
+
+        return true;
+    }
+
     // Test direct insertion
     public void testDirectInsert() {
         System.out.println("Testing direct mission insert");

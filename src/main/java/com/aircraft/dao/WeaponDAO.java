@@ -196,6 +196,7 @@ public class WeaponDAO {
         return exists;
     }
 
+
     /**
      * Retrieves all weapons from the database.
      *
@@ -259,7 +260,25 @@ public class WeaponDAO {
      * @return true if a weapon with the part number exists, false otherwise
      */
     public boolean exists(String partNumber) {
-        return existsByPartNumber(partNumber);
+        if (partNumber == null || partNumber.isEmpty()) return false;
+
+        Connection conn = null;
+        PreparedStatement stmt = null;
+        ResultSet rs = null;
+
+        try {
+            conn = DBUtil.getConnection();
+            String sql = "SELECT 1 FROM anagrafica_carichi WHERE PartNumber = ?";
+            stmt = conn.prepareStatement(sql);
+            stmt.setString(1, partNumber);
+            rs = stmt.executeQuery();
+            return rs.next();
+        } catch (SQLException e) {
+            System.err.println("Error checking weapon existence: " + e.getMessage());
+            return false;
+        } finally {
+            DBUtil.closeResources(conn, stmt, rs);
+        }
     }
 
     /**

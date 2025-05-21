@@ -424,6 +424,34 @@ public class LauncherDAO {
 
         return missions;
     }
+    /**
+     * Checks if a launcher with the given part number exists.
+     * @param partNumber The part number to check
+     * @return true if exists, false otherwise
+     */
+    public boolean exists(String partNumber) {
+        if (partNumber == null || partNumber.isEmpty()) {
+            return false;
+        }
+
+        Connection conn = null;
+        PreparedStatement stmt = null;
+        ResultSet rs = null;
+
+        try {
+            conn = DBUtil.getConnection();
+            String sql = "SELECT 1 FROM anagrafica_lanciatore WHERE PartNumber = ?";
+            stmt = conn.prepareStatement(sql);
+            stmt.setString(1, partNumber);
+            rs = stmt.executeQuery();
+            return rs.next(); // Returns true if record exists
+        } catch (SQLException e) {
+            System.err.println("Error checking launcher existence: " + e.getMessage());
+            return false;
+        } finally {
+            DBUtil.closeResources(conn, stmt, rs);
+        }
+    }
 
 
 }
