@@ -34,6 +34,7 @@ import java.util.Map;
  * Controller for the Post Flight Management Data (PFMD) module.
  * Handles recording and updating flight data after missions.
  * Updated to work with the new data structure where missile firing status is tracked in dichiarazione_missile_gui.
+ * Fixed to properly load missions from the vista_gui_missione view.
  */
 public class PFMDController {
     @FXML
@@ -225,6 +226,7 @@ public class PFMDController {
 
     /**
      * Loads available missions for an aircraft.
+     * Queries the vista_gui_missione view as specified in the requirements.
      *
      * @param matricolaVelivolo The aircraft serial number
      */
@@ -237,10 +239,10 @@ public class PFMDController {
         try {
             connection = DBUtil.getConnection();
 
-            // Query missions from vista_gui_missione
+            // Query missions from vista_gui_missione as required in the specs
             String query = "SELECT ID_Missione, NumeroVolo, DataMissione FROM vista_gui_missione " +
                     "WHERE MatricolaVelivolo = ? " +
-                    "ORDER BY DataMissione DESC";
+                    "ORDER BY DataMissione DESC, ID_Missione DESC";
 
             statement = connection.prepareStatement(query);
             statement.setString(1, matricolaVelivolo);
@@ -258,10 +260,30 @@ public class PFMDController {
                 String displayText = id + " - Flight #" + flightNumber + " (" + formattedDate + ")";
 
                 missionOptions.add(displayText);
+                System.out.println("Added mission to dropdown: " + displayText);
             }
 
-            // Set items
+            // Set items and check if list is empty
             missionComboBox.setItems(missionOptions);
+
+            // Log if no missions were found
+            if (missionOptions.isEmpty()) {
+                // Try a direct query from missione table to see if there are any missions
+                // that might not be appearing in the view
+                System.out.println("No missions found in vista_gui_missione for aircraft: " + matricolaVelivolo);
+
+                DBUtil.closeResources(null, statement, resultSet);
+                String directQuery = "SELECT ID, NumeroVolo FROM missione WHERE MatricolaVelivolo = ?";
+                statement = connection.prepareStatement(directQuery);
+                statement.setString(1, matricolaVelivolo);
+                resultSet = statement.executeQuery();
+
+                boolean hasMissions = resultSet.next();
+                if (hasMissions) {
+                    System.out.println("NOTE: Found missions in missione table but not in vista_gui_missione view. " +
+                            "This could indicate an issue with the view or its triggers.");
+                }
+            }
 
         } catch (SQLException e) {
             Window owner = aircraftComboBox.getScene().getWindow();
@@ -327,7 +349,7 @@ public class PFMDController {
         try {
             connection = DBUtil.getConnection();
 
-            // Query from vista_gui_missione
+            // Query from vista_gui_missione as specified in the requirements document
             String query = "SELECT GloadMin, GloadMax, QuotaMedia, PosizioniSparo FROM vista_gui_missione " +
                     "WHERE ID_Missione = ?";
 
@@ -357,7 +379,7 @@ public class PFMDController {
                 gloadMinField.clear();
                 gloadMaxField.clear();
                 quotaMediaField.clear();
-                System.out.println("No flight data found for mission " + missionId);
+                System.out.println("No flight data found for mission " + missionId + " in vista_gui_missione");
             }
 
         } catch (SQLException e) {

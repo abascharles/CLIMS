@@ -585,7 +585,7 @@ public class MissionManagementController {
 
     /**
      * Handles the "Save All" button click - saves the mission with launcher and missile data.
-     * Updated to work with the new database structure.
+     * Updated to work with the new database structure according to requirements.
      */
     @FXML
     protected void onSaveAllClick(ActionEvent event) {
@@ -656,6 +656,7 @@ public class MissionManagementController {
 
         Connection conn = null;
         PreparedStatement stmt = null;
+        ResultSet generatedKeys = null;
         boolean success = false;
 
         try {
@@ -704,14 +705,21 @@ public class MissionManagementController {
             stmt.setString(8, launcherP13);
             stmt.setString(9, missileP13);
 
+            // Execute the insert
             int rowsAffected = stmt.executeUpdate();
+
+            // Get the generated mission ID
             if (rowsAffected > 0) {
-                // Get the generated mission ID
-                ResultSet rs = stmt.getGeneratedKeys();
-                if (rs.next()) {
-                    int missionId = rs.getInt(1);
+                generatedKeys = stmt.getGeneratedKeys();
+                int missionId = -1;
+
+                if (generatedKeys.next()) {
+                    missionId = generatedKeys.getInt(1);
                     System.out.println("Mission saved with ID: " + missionId);
                 }
+
+                // The DB trigger will create entries in dichiarazione_missile_gui
+                // and storico_carico/storico_lanciatore, so we don't need to do that here
 
                 // Commit transaction
                 conn.commit();
@@ -719,13 +727,16 @@ public class MissionManagementController {
 
                 // Message based on loaded positions
                 int positionsCount = 0;
-                if (launcherP1 != null) positionsCount++;
-                if (launcherP13 != null) positionsCount++;
+                if (launcherP1 != null && missileP1 != null) positionsCount++;
+                if (launcherP13 != null && missileP13 != null) positionsCount++;
 
                 String message = "Mission saved successfully";
                 if (positionsCount > 0) {
                     message += " with " + positionsCount + " configured positions";
                 }
+
+                // Add debug for troubleshooting in the message
+                message += ". Mission ID: " + missionId;
 
                 AlertUtils.showInformation(owner, "Success", message);
 
@@ -747,14 +758,27 @@ public class MissionManagementController {
             success = false;
         } finally {
             // Close resources
-            try {
-                if (stmt != null) stmt.close();
-                if (conn != null) {
+            if (generatedKeys != null) {
+                try {
+                    generatedKeys.close();
+                } catch (SQLException e) {
+                    e.printStackTrace();
+                }
+            }
+            if (stmt != null) {
+                try {
+                    stmt.close();
+                } catch (SQLException e) {
+                    e.printStackTrace();
+                }
+            }
+            if (conn != null) {
+                try {
                     conn.setAutoCommit(true);
                     conn.close();
+                } catch (SQLException e) {
+                    e.printStackTrace();
                 }
-            } catch (SQLException e) {
-                e.printStackTrace();
             }
         }
     }
@@ -804,6 +828,9 @@ public class MissionManagementController {
 
         // Hide validation message
         validationMessageLabel.setVisible(false);
+
+        // Reset save button color
+        savePositionButton.setStyle("");
     }
 
     /**
