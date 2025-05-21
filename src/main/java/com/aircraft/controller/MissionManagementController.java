@@ -119,7 +119,7 @@ public class MissionManagementController {
         }
 
         public String getLauncherId() {
-            return launcherId;
+            return launcherId != null ? launcherId : "";
         }
 
         public void setLauncherId(String launcherId) {
@@ -127,7 +127,7 @@ public class MissionManagementController {
         }
 
         public String getWeaponId() {
-            return weaponId;
+            return weaponId != null ? weaponId : "";
         }
 
         public void setWeaponId(String weaponId) {
@@ -615,17 +615,15 @@ public class MissionManagementController {
         return dropdownValue; // Return as is if no parentheses
     }
 
-    /**
-     * Handles the "Save All" button click - saves the mission with launcher and missile data.
-     * Updated to work with the new database structure according to requirements.
-     */
-    // src/main/java/com/aircraft/controller/MissionManagementController.java
-    @FXML
-    protected void onSaveAllClick(ActionEvent event) {
-        Window owner = ((Node) event.getSource()).getScene().getWindow();
-        System.out.println("\n----- SAVING MISSION -----");
 
-        // Validate input fields
+    /**
+     * Validates required fields for mission creation.
+     *
+     * @param owner The owner window for showing error alerts
+     * @return true if all required fields are valid, false otherwise
+     */
+    private boolean validateRequiredFields(Window owner) {
+        // Get required field values
         Aircraft selectedAircraft = aircraftComboBox.getValue();
         LocalDate missionDate = missionDatePicker.getValue();
         String flightNumber = flightNumberField.getText();
@@ -636,25 +634,77 @@ public class MissionManagementController {
         System.out.println("Mission date: " + missionDate);
         System.out.println("Flight number: " + flightNumber);
 
-        if (selectedAircraft == null || missionDate == null || flightNumber == null || flightNumber.isEmpty()) {
-            AlertUtils.showError(owner, "Validation Error", "Aircraft, date, and flight number are required");
+        if (selectedAircraft == null) {
+            AlertUtils.showError(owner, "Validation Error", "Please select an aircraft");
+            return false;
+        }
+
+        if (missionDate == null) {
+            AlertUtils.showError(owner, "Validation Error", "Please select a mission date");
+            return false;
+        }
+
+        if (flightNumber == null || flightNumber.isEmpty()) {
+            AlertUtils.showError(owner, "Validation Error", "Please enter a flight number");
+            return false;
+        }
+
+        // Check if flight number contains only digits
+        if (!flightNumber.matches("\\d+")) {
+            AlertUtils.showError(owner, "Validation Error", "Flight number must contain only digits");
+            return false;
+        }
+
+        return true;
+    }
+    /**
+     * Handles the "Save All" button click - saves the mission with launcher and missile data.
+     * Includes improved validation, error handling, and transaction management.
+     *
+     * @param event The ActionEvent object
+     */
+    @FXML
+    protected void onSaveAllClick(ActionEvent event) {
+        Window owner = ((Node) event.getSource()).getScene().getWindow();
+        System.out.println("\n----- SAVING MISSION -----");
+
+        // STEP 1: Validate input fields
+        if (!validateRequiredFields(owner)) {
             return;
         }
 
-        // Parse flight number
+        // STEP 2: Parse flight number
         int flightNum;
         try {
-            flightNum = Integer.parseInt(flightNumber);
+            flightNum = Integer.parseInt(flightNumberField.getText());
         } catch (NumberFormatException e) {
             AlertUtils.showError(owner, "Validation Error", "Flight number must be a valid integer");
             return;
         }
 
-        // Get launcher and missile data for positions
-        String launcherP1 = null;
-        String missileP1 = null;
-        String launcherP13 = null;
-        String missileP13 = null;
+        // STEP 3: Validate position data (at least one position should have a launcher)
+        boolean hasAnyPosition = false;
+        for (String position : new String[]{"P1", "P13"}) {
+            if (missilePositionsData.containsKey(position)) {
+                MissionWeaponConfig config = missilePositionsData.get(position);
+                if (config != null && config.hasLauncher()) {
+                    hasAnyPosition = true;
+                    break;
+                }
+            }
+        }
+
+        if (!hasAnyPosition) {
+            AlertUtils.showWarning(owner, "Validation Warning",
+                    "No positions configured with launchers. Continue anyway?");
+            // You might want to make this a confirmation dialog instead
+        }
+
+        // STEP 4: Get launcher and missile data for positions with better null handling
+        String launcherP1 = "";
+        String missileP1 = "";
+        String launcherP13 = "";
+        String missileP13 = "";
 
         // Get data from position configurations with detailed logging
         System.out.println("Checking positions data - Available positions: " +
@@ -664,7 +714,7 @@ public class MissionManagementController {
             MissionWeaponConfig p1Config = missilePositionsData.get("P1");
             if (p1Config != null && p1Config.hasLauncher()) {
                 launcherP1 = p1Config.getLauncherId();
-                missileP1 = p1Config.hasWeapon() ? p1Config.getWeaponId() : null;
+                missileP1 = p1Config.hasWeapon() ? p1Config.getWeaponId() : "";
                 System.out.println("P1 configuration: Launcher=" + launcherP1 + ", Missile=" + missileP1);
             }
         }
@@ -673,22 +723,27 @@ public class MissionManagementController {
             MissionWeaponConfig p13Config = missilePositionsData.get("P13");
             if (p13Config != null && p13Config.hasLauncher()) {
                 launcherP13 = p13Config.getLauncherId();
-                missileP13 = p13Config.hasWeapon() ? p13Config.getWeaponId() : null;
+                missileP13 = p13Config.hasWeapon() ? p13Config.getWeaponId() : "";
                 System.out.println("P13 configuration: Launcher=" + launcherP13 + ", Missile=" + missileP13);
             }
         }
 
-        // Direct database access with improved error handling
+        // STEP 5: Database access with improved transaction and error handling
+        Aircraft selectedAircraft = aircraftComboBox.getValue();
+        LocalDate missionDate = missionDatePicker.getValue();
+
         Connection conn = null;
         PreparedStatement stmt = null;
         ResultSet generatedKeys = null;
+        PreparedStatement checkStmt = null;
+        ResultSet errorRs = null;
         boolean success = false;
 
         try {
             // Get connection
             conn = DBUtil.getConnection();
 
-            // Important: Create a simple test query first to verify connection works
+            // Test database connection first
             Statement testStmt = conn.createStatement();
             ResultSet testRs = testStmt.executeQuery("SELECT DATABASE() as db");
             if (testRs.next()) {
@@ -720,7 +775,7 @@ public class MissionManagementController {
             stmt.setInt(3, flightNum);
             System.out.println("3. Flight Number: " + flightNum);
 
-            // Set times if provided
+            // Set times if provided with better validation
             if (!timeStartField.getText().isEmpty() && validateTimeField(timeStartField)) {
                 LocalTime localTimeStart = LocalTime.parse(timeStartField.getText(), timeFormatter);
                 Time sqlTimeStart = Time.valueOf(localTimeStart);
@@ -741,18 +796,38 @@ public class MissionManagementController {
                 System.out.println("5. Finish Time: NULL");
             }
 
-            // Set launcher and missile part numbers
-            stmt.setString(6, launcherP1);
-            System.out.println("6. Launcher P1: " + launcherP1);
+            // Set launcher and missile part numbers with proper null handling
+            if (!launcherP1.isEmpty()) {
+                stmt.setString(6, launcherP1);
+                System.out.println("6. Launcher P1: " + launcherP1);
+            } else {
+                stmt.setNull(6, java.sql.Types.VARCHAR);
+                System.out.println("6. Launcher P1: NULL");
+            }
 
-            stmt.setString(7, missileP1);
-            System.out.println("7. Missile P1: " + missileP1);
+            if (!missileP1.isEmpty()) {
+                stmt.setString(7, missileP1);
+                System.out.println("7. Missile P1: " + missileP1);
+            } else {
+                stmt.setNull(7, java.sql.Types.VARCHAR);
+                System.out.println("7. Missile P1: NULL");
+            }
 
-            stmt.setString(8, launcherP13);
-            System.out.println("8. Launcher P13: " + launcherP13);
+            if (!launcherP13.isEmpty()) {
+                stmt.setString(8, launcherP13);
+                System.out.println("8. Launcher P13: " + launcherP13);
+            } else {
+                stmt.setNull(8, java.sql.Types.VARCHAR);
+                System.out.println("8. Launcher P13: NULL");
+            }
 
-            stmt.setString(9, missileP13);
-            System.out.println("9. Missile P13: " + missileP13);
+            if (!missileP13.isEmpty()) {
+                stmt.setString(9, missileP13);
+                System.out.println("9. Missile P13: " + missileP13);
+            } else {
+                stmt.setNull(9, java.sql.Types.VARCHAR);
+                System.out.println("9. Missile P13: NULL");
+            }
 
             // Execute the insert
             System.out.println("Executing statement...");
@@ -766,15 +841,37 @@ public class MissionManagementController {
                     int missionId = generatedKeys.getInt(1);
                     System.out.println("Mission saved with ID: " + missionId);
 
-                    // CRITICAL: Explicitly commit the transaction
+                    // Wait a moment for triggers to execute
+                    try {
+                        Thread.sleep(100);
+                    } catch (InterruptedException e) {
+                        // Ignore
+                    }
+
+                    // Check for trigger errors in error_log table
+                    String errorQuery = "SELECT * FROM error_log WHERE error_message LIKE ? ORDER BY id DESC LIMIT 1";
+                    checkStmt = conn.prepareStatement(errorQuery);
+                    checkStmt.setString(1, "%mission ID: " + missionId + "%");
+                    errorRs = checkStmt.executeQuery();
+
+                    if (errorRs.next()) {
+                        // Trigger error occurred
+                        String errorMsg = errorRs.getString("error_message");
+                        System.out.println("Trigger error detected: " + errorMsg);
+                        conn.rollback();
+                        AlertUtils.showError(owner, "Database Error", "Mission insert failed: " + errorMsg);
+                        return;
+                    }
+
+                    // No errors found, explicitly commit the transaction
                     conn.commit();
                     System.out.println("Transaction committed successfully");
                     success = true;
 
-                    // Message based on loaded positions
+                    // Count configured positions
                     int positionsCount = 0;
-                    if (launcherP1 != null) positionsCount++;
-                    if (launcherP13 != null) positionsCount++;
+                    if (!launcherP1.isEmpty()) positionsCount++;
+                    if (!launcherP13.isEmpty()) positionsCount++;
 
                     // Create success message
                     String message = "Mission saved successfully";
@@ -811,6 +908,20 @@ public class MissionManagementController {
             AlertUtils.showError(owner, "Database Error", "Error saving mission: " + e.getMessage());
         } finally {
             // Close resources
+            if (errorRs != null) {
+                try {
+                    errorRs.close();
+                } catch (SQLException e) {
+                    e.printStackTrace();
+                }
+            }
+            if (checkStmt != null) {
+                try {
+                    checkStmt.close();
+                } catch (SQLException e) {
+                    e.printStackTrace();
+                }
+            }
             DBUtil.closeResources(conn, stmt, generatedKeys);
             System.out.println("----- SAVE MISSION COMPLETED -----\n");
         }
