@@ -29,14 +29,23 @@ public class MissionDAO {
         try {
             conn = DBUtil.getConnection();
 
-            // SQL query to insert a new mission
-            String sql = "INSERT INTO missione (MatricolaVelivolo, DataMissione, NumeroVolo, OraPartenza, OraArrivo) VALUES (?, ?, ?, ?, ?)";
+            // Updated SQL query to include launcher and missile fields
+            String sql = "INSERT INTO missione (MatricolaVelivolo, DataMissione, NumeroVolo, OraPartenza, OraArrivo, " +
+                    "PartNumberLanciatoreP1, PartNumberMissileP1, PartNumberLanciatoreP13, PartNumberMissileP13) " +
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";
+
             stmt = conn.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS);
             stmt.setString(1, mission.getMatricolaVelivolo());
             stmt.setDate(2, mission.getDataMissione());
             stmt.setInt(3, mission.getNumeroVolo());
             stmt.setTime(4, mission.getOraPartenza());
             stmt.setTime(5, mission.getOraArrivo());
+
+            // Add the new parameters
+            stmt.setString(6, mission.getPartNumberLanciatoreP1());
+            stmt.setString(7, mission.getPartNumberMissileP1());
+            stmt.setString(8, mission.getPartNumberLanciatoreP13());
+            stmt.setString(9, mission.getPartNumberMissileP13());
 
             int rowsAffected = stmt.executeUpdate();
 
@@ -72,15 +81,26 @@ public class MissionDAO {
         try {
             conn = DBUtil.getConnection();
 
-            // SQL query to update an existing mission
-            String sql = "UPDATE missione SET MatricolaVelivolo = ?, DataMissione = ?, NumeroVolo = ?, OraPartenza = ?, OraArrivo = ? WHERE ID = ?";
+            // Updated SQL query to include launcher and missile fields
+            String sql = "UPDATE missione SET MatricolaVelivolo = ?, DataMissione = ?, NumeroVolo = ?, " +
+                    "OraPartenza = ?, OraArrivo = ?, PartNumberLanciatoreP1 = ?, PartNumberMissileP1 = ?, " +
+                    "PartNumberLanciatoreP13 = ?, PartNumberMissileP13 = ? WHERE ID = ?";
+
             stmt = conn.prepareStatement(sql);
             stmt.setString(1, mission.getMatricolaVelivolo());
             stmt.setDate(2, mission.getDataMissione());
             stmt.setInt(3, mission.getNumeroVolo());
             stmt.setTime(4, mission.getOraPartenza());
             stmt.setTime(5, mission.getOraArrivo());
-            stmt.setInt(6, mission.getId());
+
+            // Add the new parameters
+            stmt.setString(6, mission.getPartNumberLanciatoreP1());
+            stmt.setString(7, mission.getPartNumberMissileP1());
+            stmt.setString(8, mission.getPartNumberLanciatoreP13());
+            stmt.setString(9, mission.getPartNumberMissileP13());
+
+            // Set ID as the last parameter
+            stmt.setInt(10, mission.getId());
 
             int rowsAffected = stmt.executeUpdate();
             success = rowsAffected > 0;
@@ -386,6 +406,13 @@ public class MissionDAO {
         mission.setNumeroVolo(rs.getInt("NumeroVolo"));
         mission.setOraPartenza(rs.getTime("OraPartenza"));
         mission.setOraArrivo(rs.getTime("OraArrivo"));
+
+        // Add the new fields
+        mission.setPartNumberLanciatoreP1(rs.getString("PartNumberLanciatoreP1"));
+        mission.setPartNumberMissileP1(rs.getString("PartNumberMissileP1"));
+        mission.setPartNumberLanciatoreP13(rs.getString("PartNumberLanciatoreP13"));
+        mission.setPartNumberMissileP13(rs.getString("PartNumberMissileP13"));
+
         return mission;
     }
 
@@ -663,9 +690,10 @@ public List<WeaponStatus> getWeaponsForMission(int id) {
         try {
             conn = DBUtil.getConnection();
 
-            // SQL query to insert a new mission
-            String sql = "INSERT INTO missione (MatricolaVelivolo, DataMissione, NumeroVolo, OraPartenza, OraArrivo) " +
-                    "VALUES (?, ?, ?, ?, ?)";
+            // Updated SQL query to include launcher and missile fields
+            String sql = "INSERT INTO missione (MatricolaVelivolo, DataMissione, NumeroVolo, OraPartenza, OraArrivo, " +
+                    "PartNumberLanciatoreP1, PartNumberMissileP1, PartNumberLanciatoreP13, PartNumberMissileP13) " +
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";
 
             stmt = conn.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS);
             stmt.setString(1, mission.getMatricolaVelivolo());
@@ -673,6 +701,12 @@ public List<WeaponStatus> getWeaponsForMission(int id) {
             stmt.setInt(3, mission.getNumeroVolo());
             stmt.setTime(4, mission.getOraPartenza());
             stmt.setTime(5, mission.getOraArrivo());
+
+            // Add the new parameters
+            stmt.setString(6, mission.getPartNumberLanciatoreP1());
+            stmt.setString(7, mission.getPartNumberMissileP1());
+            stmt.setString(8, mission.getPartNumberLanciatoreP13());
+            stmt.setString(9, mission.getPartNumberMissileP13());
 
             int rowsAffected = stmt.executeUpdate();
 

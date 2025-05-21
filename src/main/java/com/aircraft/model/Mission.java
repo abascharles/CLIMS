@@ -14,6 +14,10 @@ public class Mission {
     private int numeroVolo;
     private Time oraPartenza;
     private Time oraArrivo;
+    private String partNumberLanciatoreP1;
+    private String partNumberMissileP1;
+    private String partNumberLanciatoreP13;
+    private String partNumberMissileP13;
 
     /**
      * Default constructor.
@@ -39,7 +43,38 @@ public class Mission {
         this.oraPartenza = oraPartenza;
         this.oraArrivo = oraArrivo;
     }
+    // Add getters and setters for these fields
+    public String getPartNumberLanciatoreP1() {
+        return partNumberLanciatoreP1;
+    }
 
+    public void setPartNumberLanciatoreP1(String partNumberLanciatoreP1) {
+        this.partNumberLanciatoreP1 = partNumberLanciatoreP1;
+    }
+
+    public String getPartNumberMissileP1() {
+        return partNumberMissileP1;
+    }
+
+    public void setPartNumberMissileP1(String partNumberMissileP1) {
+        this.partNumberMissileP1 = partNumberMissileP1;
+    }
+
+    public String getPartNumberLanciatoreP13() {
+        return partNumberLanciatoreP13;
+    }
+
+    public void setPartNumberLanciatoreP13(String partNumberLanciatoreP13) {
+        this.partNumberLanciatoreP13 = partNumberLanciatoreP13;
+    }
+
+    public String getPartNumberMissileP13() {
+        return partNumberMissileP13;
+    }
+
+    public void setPartNumberMissileP13(String partNumberMissileP13) {
+        this.partNumberMissileP13 = partNumberMissileP13;
+    }
     /**
      * Gets the mission ID.
      *
